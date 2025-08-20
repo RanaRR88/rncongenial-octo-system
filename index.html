@@ -1,0 +1,597 @@
+‎<!DOCTYPE html>
+‎<html lang="en">
+‎<head>
+‎  <meta charset="UTF-8" />
+‎  <meta name="viewport" content="width=device-width, initial-scale=1" />
+‎  <title>Automatic Multi-Layer URL Redirector</title>
+‎  <meta name="description" content="Client-side redirector that 'touches' multiple shortlink layers and then redirects to a final destination. Pure HTML + JS, suitable for static hosting." />
+‎  <style>
+‎    :root {
+‎      --bg: #0f172a;
+‎      --panel: #111827;
+‎      --text: #e5e7eb;
+‎      --muted: #9ca3af;
+‎      --accent: #22d3ee;
+‎      --accent-2: #34d399;
+‎      --danger: #fb7185;
+‎      --border: #1f2937;
+‎    }
+‎    html, body {
+‎      margin: 0; padding: 0;
+‎      background: var(--bg);
+‎      color: var(--text);
+‎      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+‎      height: 100%;
+‎    }
+‎    .container {
+‎      max-width: 860px;
+‎      margin: 0 auto;
+‎      padding: 24px 16px 64px;
+‎    }
+‎    header {
+‎      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+‎      margin-bottom: 16px;
+‎    }
+‎    h1 {
+‎      font-size: 18px; font-weight: 600; margin: 0;
+‎      letter-spacing: 0.3px;
+‎    }
+‎    .badge {
+‎      display: inline-flex; align-items: center; gap: 6px;
+‎      background: rgba(255,255,255,0.04);
+‎      padding: 4px 10px; border-radius: 999px; color: var(--muted);
+‎      font-size: 12px; border: 1px solid var(--border);
+‎    }
+‎    .panel {
+‎      background: var(--panel);
+‎      border: 1px solid var(--border);
+‎      border-radius: 12px;
+‎      padding: 16px;
+‎    }
+‎    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+‎    .row > * { margin: 4px 0; }
+‎    .status {
+‎      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+‎      color: var(--muted);
+‎      font-size: 13px;
+‎      white-space: pre-wrap;
+‎      line-height: 1.5;
+‎      max-height: 200px;
+‎      overflow: auto;
+‎      background: rgba(255,255,255,0.03);
+‎      border: 1px dashed var(--border);
+‎      border-radius: 10px;
+‎      padding: 10px;
+‎    }
+‎    .btn {
+‎      background: transparent; color: var(--text);
+‎      border: 1px solid var(--border); border-radius: 10px;
+‎      padding: 8px 12px; cursor: pointer; font-size: 14px;
+‎    }
+‎    .btn:hover { border-color: #2a3443; background: rgba(255,255,255,0.03); }
+‎    .btn.primary { border-color: transparent; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #001;
+‎      font-weight: 600; }
+‎    .btn.danger { border-color: rgba(251, 113, 133, 0.5); color: #ffdbe0; }
+‎    .kicker {
+‎      color: var(--muted);
+‎      font-size: 13px;
+‎    }
+‎    .inputs {
+‎      display: grid;
+‎      grid-template-columns: 1fr 1fr;
+‎      gap: 12px;
+‎    }
+‎    .inputs .full { grid-column: 1 / -1; }
+‎    label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: inline-block; }
+‎    input[type="text"], input[type="number"], textarea {
+‎      width: 100%; background: #0b1220; color: var(--text);
+‎      border: 1px solid var(--border); border-radius: 10px;
+‎      padding: 10px 12px; font-size: 14px; outline: none;
+‎    }
+‎    textarea { min-height: 110px; resize: vertical; }
+‎    .progress-wrap { display: flex; align-items: center; gap: 12px; }
+‎    progress {
+‎      width: 100%; height: 12px; border-radius: 999px; appearance: none; -webkit-appearance: none;
+‎    }
+‎    progress::-webkit-progress-bar { background-color: #0b1220; border-radius: 999px; }
+‎    progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
+‎    progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
+‎    .settings-toggle {
+‎      position: fixed; right: 12px; top: 12px; z-index: 5;
+‎      background: rgba(255,255,255,0.06);
+‎      border: 1px solid var(--border); border-radius: 999px;
+‎      padding: 7px 10px; cursor: pointer;
+‎      backdrop-filter: blur(6px);
+‎    }
+‎    .settings {
+‎      position: fixed; right: 12px; top: 48px; z-index: 10;
+‎      width: min(92vw, 720px);
+‎      display: none;
+‎    }
+‎    .settings.open { display: block; }
+‎    .notes {
+‎      margin-top: 12px; color: var(--muted); font-size: 12px;
+‎    }
+‎    .footer {
+‎      margin-top: 18px; color: var(--muted); font-size: 12px;
+‎    }
+‎    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
+‎    .small { font-size: 12px; color: var(--muted); }
+‎  </style>
+‎  <!--
+‎    Automatic Multi-Layer URL Redirector (Client-side, Static)
+‎
+‎    What this does:
+‎    - Accepts a set of shortlink URLs and a final destination URL.
+‎    - Sequentially "touches" each shortlink (via fetch/img) to mimic navigation through HTTP-level redirects.
+‎    - Then navigates the browser to your destination.
+‎
+‎    Important limitations (browser security/CORS):
+‎    - Cross-origin requests are restricted. This script cannot read or control pages on other domains.
+‎    - fetch() with mode: 'no-cors' triggers network requests but does not execute any page JavaScript.
+‎    - This will NOT bypass CAPTCHAs, countdown timers, click-to-continue buttons, or JS-based shortlink gates.
+‎    - Shorteners that require interaction, cookies, or script execution may not register as "visited."
+‎    - Optimized for simple HTTP 30x redirects and "touch" style counting.
+‎
+‎    Deployment:
+‎    - Purely client-side. Works on static hosts (GitHub Pages, Netlify, Replit, etc.).
+‎    - Configurable via localStorage and/or URL query parameters.
+‎      • ?s=https://a.example/x&s=https://b.example/y&dest=https://final.example/page
+‎      • Optional: &delay=500 (ms between layers), &timeout=2500 (ms per layer), &edit=1 to open settings UI.
+‎
+‎    Usage flow:
+‎    - On load, it reads config (query params > saved localStorage > defaults), touches shortlinks, then redirects.
+‎    - The settings panel lets you update values and save them to your browser without editing code.
+‎
+‎    Security tip:
+‎    - Avoid adding untrusted shortlinks. You are responsible for the destinations you navigate to.
+‎
+‎    License:
+‎    - Use at your own risk. No warranty.
+‎  -->
+‎</head>
+‎<body>
+‎  <button class="settings-toggle" id="settingsToggle" title="Open settings (or press 'E')">⚙️</button>
+‎  <div class="settings" id="settingsPanel">
+‎    <div class="panel">
+‎      <div class="row" style="justify-content: space-between;">
+‎        <strong>Settings</strong>
+‎        <span class="small">Saved in localStorage • Query params override saved values</span>
+‎      </div>
+‎      <div class="inputs" style="margin-top: 10px;">
+‎        <div class="full">
+‎          <label for="shortlinksInput">Shortlink layers (one URL per line)</label>
+‎          <textarea id="shortlinksInput" placeholder="https://short1.example/abc
+‎https://short2.example/def"></textarea>
+‎        </div>
+‎        <div class="full">
+‎          <label for="destinationInput">Final destination URL</label>
+‎          <input type="text" id="destinationInput" placeholder="https://destination.example/page" />
+‎        </div>
+‎        <div>
+‎          <label for="delayInput">Delay between layers (ms)</label>
+‎          <input type="number" id="delayInput" min="0" step="50" placeholder="500" />
+‎        </div>
+‎        <div>
+‎          <label for="timeoutInput">Per-layer timeout (ms)</label>
+‎          <input type="number" id="timeoutInput" min="250" step="250" placeholder="2500" />
+‎        </div>
+‎      </div>
+‎      <div class="row" style="margin-top: 12px;">
+‎        <button class="btn primary" id="saveAndRunBtn">Save & Run Now</button>
+‎        <button class="btn" id="saveBtn">Save</button>
+‎        <button class="btn danger" id="clearBtn">Clear Saved</button>
+‎        <button class="btn" id="closeSettingsBtn">Close</button>
+‎      </div>
+‎      <div class="notes">
+‎        Tip: You can also pass configuration via query params:
+‎        <span class="mono">?s=https://s1.example/x&s=https://s2.example/y&dest=https://final.example/z&delay=500&timeout=2500</span>
+‎      </div>
+‎    </div>
+‎  </div>
+‎
+‎  <div class="container">
+‎    <header>
+‎      <h1>Automatic Multi-Layer URL Redirector</h1>
+‎      <span class="badge">Client-side • Static • No CAPTCHAs</span>
+‎    </header>
+‎
+‎    <div class="panel">
+‎      <div class="progress-wrap" style="margin-bottom: 10px;">
+‎        <progress id="progress" value="0" max="1"></progress>
+‎        <span id="progressLabel" class="kicker">Preparing…</span>
+‎      </div>
+‎
+‎      <div class="row" style="justify-content: space-between;">
+‎        <div class="kicker">
+‎          <div>Working… touching shortlink layers, then redirecting to your destination.</div>
+‎          <div class="small">Runs automatically; no interaction needed.</div>
+‎        </div>
+‎        <div>
+‎          <button class="btn" id="pauseBtn" title="Pause/resume the sequence">⏸️ Pause</button>
+‎        </div>
+‎      </div>
+‎
+‎      <div id="status" class="status" style="margin-top: 12px;"></div>
+‎
+‎      <div class="footer">
+‎        Notes:
+‎        <ul>
+‎          <li>Cross-origin/CORS means this page cannot read or control shortlink pages on other domains.</li>
+‎          <li>fetch() here does not execute any JavaScript from shortlink pages; it only triggers network requests.</li>
+‎          <li>This will not bypass CAPTCHAs, timers, or click gates. Best for simple HTTP redirect shorteners.</li>
+‎        </ul>
+‎      </div>
+‎    </div>
+‎  </div>
+‎
+‎<script>
+‎(() => {
+‎  'use strict';
+‎
+‎  // ========== Configuration & Persistence ==========
+‎
+‎  const APP_STORAGE_KEY = 'multiLayerRedirector.v1';
+‎
+‎  const DEFAULT_CONFIG = {
+‎    shortlinks: [
+‎     
+‎'https://link.short2url.in/tCrUc7m'
+‎    ],
+‎    destination: 
+‎'https://www.google.com/', 
+‎    delayMsBetweenLayers: 500,           // ms delay after each layer "touch"
+‎    perLayerTimeoutMs: 2500              // ms to wait per layer before moving on
+‎  };
+‎
+‎  function loadSavedConfig() {
+‎    try {
+‎      const raw = localStorage.getItem(APP_STORAGE_KEY);
+‎      if (!raw) return null;
+‎      const parsed = JSON.parse(raw);
+‎      if (!parsed || typeof parsed !== 'object') return null;
+‎      return parsed;
+‎    } catch {
+‎      return null;
+‎    }
+‎  }
+‎
+‎  function saveConfig(cfg) {
+‎    localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(cfg));
+‎  }
+‎
+‎  function clearSavedConfig() {
+‎    localStorage.removeItem(APP_STORAGE_KEY);
+‎  }
+‎
+‎  function parseQueryConfig() {
+‎    const p = new URLSearchParams(location.search);
+‎    const q = {};
+‎
+‎    // Multiple shortlinks can be provided as repeated ?s=url
+‎    const sParams = p.getAll('s');
+‎    const slist = p.get('slist'); // optional comma or newline-separated
+‎    const allShorts = [];
+‎    if (sParams && sParams.length) allShorts.push(...sParams);
+‎    if (slist) {
+‎      const parts = slist.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+‎      allShorts.push(...parts);
+‎    }
+‎    if (allShorts.length) q.shortlinks = allShorts;
+‎
+‎    const dest = p.get('dest');
+‎    if (dest) q.destination = dest;
+‎
+‎    const delay = parseInt(p.get('delay'), 10);
+‎    if (!isNaN(delay)) q.delayMsBetweenLayers = Math.max(0, delay);
+‎
+‎    const timeout = parseInt(p.get('timeout'), 10);
+‎    if (!isNaN(timeout)) q.perLayerTimeoutMs = Math.max(250, timeout);
+‎
+‎    const edit = p.get('edit');
+‎    if (edit != null) q._openEditor = (edit === '1' || edit === 'true');
+‎
+‎    const autostart = p.get('autostart');
+‎    if (autostart != null) q._autostart = (autostart !== '0' && autostart !== 'false');
+‎
+‎    return q;
+‎  }
+‎
+‎  function mergeConfig(base, override) {
+‎    const out = {...base};
+‎    for (const k of Object.keys(override || {})) {
+‎      if (override[k] == null) continue;
+‎      if (k === 'shortlinks' && Array.isArray(override[k])) {
+‎        out.shortlinks = override[k].filter(Boolean);
+‎      } else {
+‎        out[k] = override[k];
+‎      }
+‎    }
+‎    return out;
+‎  }
+‎
+‎  function resolveConfig() {
+‎    const saved = loadSavedConfig();
+‎    const query = parseQueryConfig();
+‎
+‎    let cfg = DEFAULT_CONFIG;
+‎    if (saved) cfg = mergeConfig(cfg, saved);
+‎    cfg = mergeConfig(cfg, query);
+‎
+‎    // Normalize
+‎    cfg.shortlinks = (cfg.shortlinks || []).map(s => s.trim()).filter(Boolean);
+‎    cfg.destination = (cfg.destination || '').trim();
+‎    cfg.delayMsBetweenLayers = Number(cfg.delayMsBetweenLayers) || 0;
+‎    cfg.perLayerTimeoutMs = Math.max(250, Number(cfg.perLayerTimeoutMs) || 2500);
+‎
+‎    const ui = {
+‎      openEditorOnLoad: !!query._openEditor,
+‎      autostart: query._autostart == null ? true : !!query._autostart
+‎    };
+‎
+‎    return { cfg, ui };
+‎  }
+‎
+‎  // ========== DOM Helpers ==========
+‎
+‎  const $ = (sel) => document.querySelector(sel);
+‎  const statusEl = $('#status');
+‎  const progressEl = $('#progress');
+‎  const progressLabelEl = $('#progressLabel');
+‎  const pauseBtn = $('#pauseBtn');
+‎
+‎  function log(line) {
+‎    const ts = new Date().toISOString().split('T')[1].replace('Z','');
+‎    statusEl.textContent += `[${ts}] ${line}\n`;
+‎    statusEl.scrollTop = statusEl.scrollHeight;
+‎    // Also print to console for debugging
+‎    try { console.log(line); } catch {}
+‎  }
+‎
+‎  function setProgress(current, total, label = '') {
+‎    progressEl.max = Math.max(1, total);
+‎    progressEl.value = Math.min(current, total);
+‎    progressLabelEl.textContent = label || `${current}/${total}`;
+‎  }
+‎
+‎  // ========== Network "Touch" Utilities ==========
+‎
+‎  function withTimeout(promise, ms, onTimeout) {
+‎    return new Promise((resolve, reject) => {
+‎      const to = setTimeout(() => {
+‎        try { onTimeout && onTimeout(); } catch {}
+‎        reject(new Error('timeout'));
+‎      }, ms);
+‎      promise.then(
+‎        v => { clearTimeout(to); resolve(v); },
+‎        e => { clearTimeout(to); reject(e); }
+‎      );
+‎    });
+‎  }
+‎
+‎  // Attempts to "touch" a URL via fetch (no-cors). This triggers network requests,
+‎  // but does not execute page JavaScript or expose response details.
+‎  function touchViaFetch(url, timeoutMs = 2500) {
+‎    const ctrl = new AbortController();
+‎    const p = fetch(url, {
+‎      mode: 'no-cors',
+‎      redirect: 'follow',
+‎      cache: 'no-store',
+‎      referrerPolicy: 'no-referrer',
+‎      signal: ctrl.signal,
+‎      // credentials omitted: cross-site cookies likely blocked or unnecessary for "touch"
+‎    }).catch(() => { /* ignore */ });
+‎
+‎    return withTimeout(p, timeoutMs, () => ctrl.abort())
+‎      .then(() => ({ ok: true, via: 'fetch' }))
+‎      .catch(() => ({ ok: false, via: 'fetch' }));
+‎  }
+‎
+‎  // Also attempt with an <img> request to guarantee a GET hits the server.
+‎  // We append a cache buster to avoid caching.
+‎  function touchViaImage(url, timeoutMs = 2500) {
+‎    return new Promise((resolve) => {
+‎      const img = new Image();
+‎      const breaker = url.includes('?') ? '&' : '?';
+‎      const cacheBusted = `${url}${breaker}__t=${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+‎      let settled = false;
+‎      const done = (ok) => {
+‎        if (settled) return;
+‎        settled = true;
+‎        cleanup();
+‎        resolve({ ok, via: 'img' });
+‎      };
+‎      const to = setTimeout(() => done(false), timeoutMs);
+‎      function cleanup() {
+‎        clearTimeout(to);
+‎        img.onload = null;
+‎        img.onerror = null;
+‎      }
+‎      img.onload = () => done(true);
+‎      img.onerror = () => done(true); // even errors still indicate a network request occurred
+‎      img.referrerPolicy = 'no-referrer';
+‎      img.decoding = 'async';
+‎      img.src = cacheBusted;
+‎    });
+‎  }
+‎
+‎  // Race fetch and image; resolve on first completion or timeout.
+‎  async function touchUrlBestEffort(url, timeoutMs) {
+‎    const start = performance.now();
+‎    const result = await Promise.race([
+‎      touchViaFetch(url, timeoutMs),
+‎      touchViaImage(url, timeoutMs),
+‎      new Promise(res => setTimeout(() => res({ ok: false, via: 'timeout' }), timeoutMs))
+‎    ]);
+‎    const dur = Math.round(performance.now() - start);
+‎    return { ...result, ms: dur };
+‎  }
+‎
+‎  // ========== Redirect Flow ==========
+‎
+‎  let paused = false;
+‎  function setPaused(p) {
+‎    paused = p;
+‎    pauseBtn.textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+‎  }
+‎
+‎  async function waitWhilePaused() {
+‎    if (!paused) return;
+‎    log('Paused…');
+‎    await new Promise(res => {
+‎      const int = setInterval(() => {
+‎        if (!paused) { clearInterval(int); res(); }
+‎      }, 100);
+‎    });
+‎    log('Resumed.');
+‎  }
+‎
+‎  function preconnectTo(urlStr) {
+‎    try {
+‎      const u = new URL(urlStr);
+‎      const link = document.createElement('link');
+‎      link.rel = 'preconnect';
+‎      link.href = `${u.protocol}//${u.host}`;
+‎      document.head.appendChild(link);
+‎    } catch {}
+‎  }
+‎
+‎  function redirectTo(url) {
+‎    // Prefer replace() to avoid back button returning to this page
+‎    try {
+‎      window.location.replace(url);
+‎      // Safety fallback to ensure navigation
+‎      setTimeout(() => { try { window.location.href = url; } catch {} }, 1200);
+‎    } catch {
+‎      window.location.href = url;
+‎    }
+‎  }
+‎
+‎  async function followShortlinksAndRedirect({ shortlinks, destination, delayMsBetweenLayers, perLayerTimeoutMs }) {
+‎    const totalSteps = (shortlinks?.length || 0) + 1; // +1 for final redirect
+‎    setProgress(0, totalSteps, 'Starting…');
+‎
+‎    if (!destination) {
+‎      log('No destination URL configured. Aborting.');
+‎      setProgress(0, 1, 'No destination configured');
+‎      return;
+‎    }
+‎
+‎    // Warm up the final destination connection
+‎    preconnectTo(destination);
+‎
+‎    // Sequentially "touch" each shortlink
+‎    for (let i = 0; i < (shortlinks || []).length; i++) {
+‎      await waitWhilePaused();
+‎
+‎      const url = shortlinks[i];
+‎      setProgress(i, totalSteps, `Touching layer ${i + 1}/${shortlinks.length}`);
+‎      log(`Layer ${i + 1}/${shortlinks.length}: ${url}`);
+‎
+‎      try {
+‎        const res = await touchUrlBestEffort(url, perLayerTimeoutMs);
+‎        log(` → ${res.ok ? 'Touched' : 'Timed out'} via ${res.via} in ${res.ms} ms`);
+‎      } catch (err) {
+‎        log(` → Error touching ${url}: ${err && err.message ? err.message : String(err)}`);
+‎      }
+‎
+‎      // Optional delay between layers
+‎      if (delayMsBetweenLayers > 0) {
+‎        await waitWhilePaused();
+‎        await new Promise(res => setTimeout(res, delayMsBetweenLayers));
+‎      }
+‎    }
+‎
+‎    // Final redirect
+‎    await waitWhilePaused();
+‎    setProgress(totalSteps, totalSteps, 'Redirecting…');
+‎    log(`Redirecting to destination: ${destination}`);
+‎    redirectTo(destination);
+‎  }
+‎
+‎  // ========== UI Wiring ==========
+‎
+‎  function populateSettingsUI(cfg) {
+‎    $('#shortlinksInput').value = (cfg.shortlinks || []).join('\n');
+‎    $('#destinationInput').value = cfg.destination || '';
+‎    $('#delayInput').value = String(cfg.delayMsBetweenLayers ?? 500);
+‎    $('#timeoutInput').value = String(cfg.perLayerTimeoutMs ?? 2500);
+‎  }
+‎
+‎  function readSettingsUI() {
+‎    const slRaw = $('#shortlinksInput').value || '';
+‎    const shortlinks = slRaw.split('\n').map(s => s.trim()).filter(Boolean);
+‎    return {
+‎      shortlinks,
+‎      destination: ($('#destinationInput').value || '').trim(),
+‎      delayMsBetweenLayers: Math.max(0, Number($('#delayInput').value || 0)),
+‎      perLayerTimeoutMs: Math.max(250, Number($('#timeoutInput').value || 2500))
+‎    };
+‎  }
+‎
+‎  function openSettingsPanel(open) {
+‎    const panel = $('#settingsPanel');
+‎    if (open) panel.classList.add('open'); else panel.classList.remove('open');
+‎  }
+‎
+‎  // ========== Boot ==========
+‎  document.addEventListener('DOMContentLoaded', async () => {
+‎    const { cfg, ui } = resolveConfig();
+‎
+‎    populateSettingsUI(cfg);
+‎    openSettingsPanel(ui.openEditorOnLoad);
+‎
+‎    // Start immediately unless autostart is disabled via query param
+‎    setProgress(0, Math.max(1, (cfg.shortlinks || []).length + 1), 'Preparing…');
+‎
+‎    // Hook up buttons
+‎    $('#settingsToggle').addEventListener('click', () => openSettingsPanel(!$('#settingsPanel').classList.contains('open')));
+‎    $('#closeSettingsBtn').addEventListener('click', () => openSettingsPanel(false));
+‎    document.addEventListener('keydown', (e) => {
+‎      if (e.key.toLowerCase() === 'e') openSettingsPanel(!$('#settingsPanel').classList.contains('open'));
+‎      if (e.key.toLowerCase() === 'p') setPaused(!paused);
+‎    });
+‎
+‎    $('#saveBtn').addEventListener('click', () => {
+‎      const updated = readSettingsUI();
+‎      saveConfig(updated);
+‎      log('Settings saved to localStorage.');
+‎    });
+‎
+‎    $('#clearBtn').addEventListener('click', () => {
+‎      clearSavedConfig();
+‎      log('Saved settings cleared. Using defaults (unless overridden by query params).');
+‎    });
+‎
+‎    $('#saveAndRunBtn').addEventListener('click', () => {
+‎      const updated = readSettingsUI();
+‎      saveConfig(updated);
+‎      openSettingsPanel(false);
+‎      setPaused(false);
+‎      statusEl.textContent = ''; // clear log
+‎      followShortlinksAndRedirect(updated);
+‎    });
+‎
+‎    pauseBtn.addEventListener('click', () => setPaused(!paused));
+‎
+‎    // Kick off automatically
+‎    if (ui.autostart !== false) {
+‎      // Show a short banner of what's going to happen
+‎      const info = [
+‎        `Shortlinks: ${cfg.shortlinks.length}`,
+‎        `Delay: ${cfg.delayMsBetweenLayers} ms`,
+‎        `Timeout: ${cfg.perLayerTimeoutMs} ms`,
+‎        `Destination: ${cfg.destination || '(none)'}`,
+‎      ].join(' | ');
+‎      log(`Config → ${info}`);
+‎
+‎      // Proceed
+‎      followShortlinksAndRedirect(cfg);
+‎    } else {
+‎      log('Autostart disabled by query param. Click "Save & Run Now" to begin.');
+‎    }
+‎  });
+‎})();
+‎</script>
+‎</body>
+‎</html>
